@@ -30,6 +30,9 @@ sources = {
 		"density_res_zscores",
 	],
 	# A ######################################################################
+        "pilot/aalhossary" : [
+                "bootcamp", # /* Amr ALHOSSARY, documentation NOT YET */
+        ],
 	"pilot/aginsparg" : [
 		#"holes_identifier",
 		"space_fill_analysis",
