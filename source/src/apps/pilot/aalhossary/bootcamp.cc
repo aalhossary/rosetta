@@ -12,10 +12,13 @@
 #include <basic/options/keys/in.OptionKeys.gen.hh>
 #include <basic/options/option.hh>
 #include <core/import_pose/import_pose.hh>
+#include <core/conformation/Residue.hh>
 #include <core/pose/Pose.hh>
 #include <core/scoring/ScoreFunction.hh>
 #include <core/scoring/ScoreFunctionFactory.hh>
 #include <devel/init.hh>
+#include <numeric/random/random.hh>
+#include <protocols/moves/MonteCarlo.hh>
 #include <utility/pointer/owning_ptr.hh>
 
 
@@ -32,9 +35,25 @@ int main(int argc, char** argv) {
 	}
     core::pose::PoseOP mypose = core::import_pose::pose_from_file(filenames[1]);
     core::scoring::ScoreFunctionOP sfxn = core::scoring::get_score_function();
-
+    core::Size N = mypose->size();
     core::Real score = sfxn->score( *mypose );
     std::cout << "score =" << score << std::endl;
+
+    protocols::moves::MonteCarlo monteCarlo = protocols::moves::MonteCarlo(*mypose, *sfxn, 1.);
+
+    for (int step = 0; step < 10000; ++step) {
+        core::Size randres = static_cast< core::Size > ( numeric::random::uniform() * N + 1 );
+        core::Real pert1 = numeric::random::gaussian();
+        core::Real pert2 = numeric::random::gaussian();
+        core::Real orig_phi = mypose->phi( randres );
+        core::Real orig_psi = mypose->psi( randres );
+        mypose->set_phi( randres, orig_phi + pert1 );
+        mypose->set_psi( randres, orig_psi + pert2 );
+        bool accepted = monteCarlo.boltzmann(*mypose);
+        if(accepted)
+            std::cout << step <<"\t new score " << sfxn->score(*mypose) << std::endl;
+    }
+
 
     return 0;
 
