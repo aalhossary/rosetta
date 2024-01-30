@@ -29,17 +29,22 @@
 // Utility, etc Headers
 #include <basic/Tracer.hh>
 
+#include <protocols/bootcamp/Queue.hh>
+
 static basic::Tracer TR("QueueTests");
 
 
 class QueueTests : public CxxTest::TestSuite {
 	//Define Variables
+    protocols::bootcamp::QueueOP queue1;
+    protocols::bootcamp::QueueOP queue2;
 
 public:
 
 	void setUp() {
 		core_init();
-
+        queue1 = protocols::bootcamp::QueueOP (new protocols::bootcamp::Queue());
+        queue2 = protocols::bootcamp::QueueOP (new protocols::bootcamp::Queue());
 	}
 
 	void tearDown() {
@@ -53,5 +58,41 @@ public:
         TS_ASSERT( true );
 	}
 
+    void test_empty(){
+        TS_ASSERT(queue1->is_empty())
+        queue1->enqueue("1");
+        TS_ASSERT(! queue1->is_empty())
+        queue1->enqueue("2");
+        TS_ASSERT(! queue1->is_empty())
+        queue1->dequeue();
+        queue1->dequeue();
+        TS_ASSERT(queue1->is_empty())
+    }
+
+    void test_size(){
+        TS_ASSERT_EQUALS(queue1->size(), 0)
+        queue1->enqueue("A");
+        TS_ASSERT_EQUALS(queue1->size(), 1)
+        queue1->enqueue("B");
+        TS_ASSERT_EQUALS(queue1->size(), 2)
+        queue1->dequeue();
+        TS_ASSERT_EQUALS(queue1->size(), 1)
+        queue1->dequeue();
+        TS_ASSERT_EQUALS(queue1->size(), 0)
+    }
+
+    void test_canNotDequeEmpty(){
+        assert(queue1->is_empty());
+        TS_ASSERT_THROWS_ANYTHING(queue1->dequeue())
+    }
+
+    void test_FIFO(){
+        queue1->enqueue("1");
+        queue1->enqueue("2");
+        queue1->enqueue("3");
+        TS_ASSERT_EQUALS(queue1->dequeue(), "1")
+        TS_ASSERT_EQUALS(queue1->dequeue(), "2")
+        TS_ASSERT_EQUALS(queue1->dequeue(), "3")
+    }
 
 };
