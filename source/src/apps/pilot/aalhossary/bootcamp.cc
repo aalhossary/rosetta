@@ -11,8 +11,14 @@
 
 #include <basic/options/keys/in.OptionKeys.gen.hh>
 #include <basic/options/option.hh>
-#include <core/import_pose/import_pose.hh>
 #include <core/conformation/Residue.hh>
+#include <core/import_pose/import_pose.hh>
+#include <core/kinematics/MoveMap.hh>
+#include <core/optimization/MinimizerOptions.hh>
+#include <core/optimization/AtomTreeMinimizer.hh>
+#include <core/pack/pack_rotamers.hh>
+#include <core/pack/task/PackerTask.hh>
+#include <core/pack/task/TaskFactory.hh>
 #include <core/pose/Pose.hh>
 #include <core/scoring/ScoreFunction.hh>
 #include <core/scoring/ScoreFunctionFactory.hh>
@@ -40,15 +46,35 @@ int main(int argc, char** argv) {
     std::cout << "score =" << score << std::endl;
 
     protocols::moves::MonteCarlo monteCarlo = protocols::moves::MonteCarlo(*mypose, *sfxn, 1.);
+    core::kinematics::MoveMap mm;
+    mm.set_bb( true );
+    mm.set_chi( true );
+    core::optimization::AtomTreeMinimizer atm;
+    core::optimization::MinimizerOptions min_opts( "lbfgs_armijo_atol", 0.01, true );
 
+    core::pose::Pose copy_pose;
     for (int step = 0; step < 10000; ++step) {
         core::Size randres = static_cast< core::Size > ( numeric::random::uniform() * N + 1 );
         core::Real pert1 = numeric::random::gaussian();
         core::Real pert2 = numeric::random::gaussian();
         core::Real orig_phi = mypose->phi( randres );
         core::Real orig_psi = mypose->psi( randres );
+
+        //perturbation
         mypose->set_phi( randres, orig_phi + pert1 );
         mypose->set_psi( randres, orig_psi + pert2 );
+
+        //packing
+        core::pack::task::PackerTaskOP repack_task = core::pack::task::TaskFactory::create_packer_task( *mypose );
+        repack_task->restrict_to_repacking();
+        core::pack::pack_rotamers( *mypose, *sfxn, repack_task );
+
+        //minimization
+//        atm.run( *mypose, mm, *sfxn, min_opts );
+        copy_pose = *mypose;
+        atm.run( copy_pose, mm, *sfxn, min_opts );
+        *mypose = copy_pose;
+
         bool accepted = monteCarlo.boltzmann(*mypose);
         if(accepted)
             std::cout << step <<"\t new score " << sfxn->score(*mypose) << std::endl;
