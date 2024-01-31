@@ -83,6 +83,10 @@ sources = {
 		"BranchAngleOptimizer",
 	],
 
+	"bootcamp" : [
+		"FoldTreeFromSS",
+	],
+
 	"calc_taskop_movers" : [
 		"ForceDisulfidesMover",
 	],
