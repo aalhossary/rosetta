@@ -28,6 +28,8 @@
 #include <utility/pointer/owning_ptr.hh>
 
 
+static constexpr const int NUM_ITEERATIONS = 1000;
+
 int main(int argc, char** argv) {
 	std::cout << "Hello World!" << std::endl;
 
@@ -53,7 +55,8 @@ int main(int argc, char** argv) {
     core::optimization::MinimizerOptions min_opts( "lbfgs_armijo_atol", 0.01, true );
 
     core::pose::Pose copy_pose;
-    for (int step = 0; step < 10000; ++step) {
+    core::Size acceptanceCounter = 0, hundredIterationsAcceptanceCounter = 0;
+    for (int step = 0; step < NUM_ITEERATIONS; ++step) {
         core::Size randres = static_cast< core::Size > ( numeric::random::uniform() * N + 1 );
         core::Real pert1 = numeric::random::gaussian();
         core::Real pert2 = numeric::random::gaussian();
@@ -76,9 +79,21 @@ int main(int argc, char** argv) {
         *mypose = copy_pose;
 
         bool accepted = monteCarlo.boltzmann(*mypose);
-        if(accepted)
+        if(accepted){
+            acceptanceCounter++;
+            hundredIterationsAcceptanceCounter++;
             std::cout << step <<"\t new score " << sfxn->score(*mypose) << std::endl;
+        }
+
+        if (step && !(step%100)){
+            core::Real localAcceptanceRate = static_cast<core::Real>(hundredIterationsAcceptanceCounter) / 100.;
+            std::cout << step <<"\t Current Acceptance Rate \t" << localAcceptanceRate << "%" << std::endl;
+            hundredIterationsAcceptanceCounter = 0;
+        }
+
     }
+    core::Real acceptanceRate = static_cast<core::Real>(acceptanceCounter) * 100. / NUM_ITEERATIONS;
+    std::cout << "Overall Acceptance Rate \t" << acceptanceRate << "%" << std::endl;
 
 
     return 0;
