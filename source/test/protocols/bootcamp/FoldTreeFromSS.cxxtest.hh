@@ -18,8 +18,8 @@
 // Test headers
 #include <cxxtest/TestSuite.h>
 
-#include <test/util/pose_funcs.hh>
-#include <test/core/init_util.hh>
+#include <util/pose_funcs.hh>
+#include <core/init_util.hh>
 
 // Utility headers
 #include <utility/vector1.hh>
@@ -27,12 +27,12 @@
 /// Project headers
 #include <core/types.hh>
 
-#include "../../../src/core/kinematics/FoldTree.hh"
-#include "../../../src/core/scoring/dssp/Dssp.hh"
-#include "../../../src/core/pose/Pose.hh"
-#include "../../../src/core/types.hh"
-#include "../../../src/utility/vector1.hh"
-#include "../../../external/cxxtest/cxxtest/TestSuite.h"
+#include <core/kinematics/FoldTree.hh>
+#include <core/scoring/dssp/Dssp.hh>
+#include <core/pose/Pose.hh>
+#include <core/types.hh>
+#include <utility/vector1.hh>
+#include <protocols/bootcamp/fold_tree_from_ss.hh>
 
 // C++ headers
 
@@ -44,38 +44,6 @@
 class FoldTreeFromSSTests : public CxxTest::TestSuite {
 
 public:
-
-    static utility::vector1< std::pair< core::Size, core::Size > >
-    identify_secondary_structure_spans( std::string const & ss_string )
-    {
-        utility::vector1< std::pair< core::Size, core::Size > > ss_boundaries;
-        core::Size strand_start = -1;
-        for ( core::Size ii = 0; ii < ss_string.size(); ++ii ) {
-            if ( ss_string[ ii ] == 'E' || ss_string[ ii ] == 'H'  ) {
-                if ( int( strand_start ) == -1 ) {
-                    strand_start = ii;
-                } else if ( ss_string[ii] != ss_string[strand_start] ) {
-                    ss_boundaries.push_back( std::make_pair( strand_start+1, ii ) );
-                    strand_start = ii;
-                }
-            } else {
-                if ( int( strand_start ) != -1 ) {
-                    ss_boundaries.push_back( std::make_pair( strand_start+1, ii ) );
-                    strand_start = -1;
-                }
-            }
-        }
-        if ( int( strand_start ) != -1 ) {
-            // last residue was part of a ss-eleemnt
-            ss_boundaries.push_back( std::make_pair( strand_start+1, ss_string.size() ));
-        }
-        for ( core::Size ii = 1; ii <= ss_boundaries.size(); ++ii ) {
-            std::cout << "SS Element " << ii << " from residue "
-                      << ss_boundaries[ ii ].first << " to "
-                      << ss_boundaries[ ii ].second << std::endl;
-        }
-        return ss_boundaries;
-    }
 
     // Shared initialization goes here.
 	void setUp() override {
@@ -94,7 +62,7 @@ public:
 
     void test_sample1(){
         std::string sample = "   EEEEE   HHHHHHHH  EEEEE   IGNOR EEEEEE   HHHHHHHHHHH  EEEEE  HHHH   ";
-        auto result = identify_secondary_structure_spans(sample);
+        auto result = protocols::bootcamp::identify_secondary_structure_spans(sample);
         TS_ASSERT_EQUALS(result.size(), 7)
         std::pair< core::Size, core::Size > result_i;
         result_i = result[1];
@@ -131,88 +99,21 @@ public:
 //        TS_ASSERT_THROWS_ANYTHING(queue1->dequeue())
     }
 
-    core::kinematics::FoldTreeOP fold_tree_from_ss_string(std::string secStruct){
-        core::kinematics::FoldTreeOP retFoldTree (new core::kinematics::FoldTree());
-        core::kinematics::FoldTree & ft = *retFoldTree;
-        std::set<core::Size> nodeIds;//used to store already used nodeIds
-        std::set<std::pair<core::Size , core::Size>> edges;
-        auto ssSegments = identify_secondary_structure_spans(secStruct);
-
-        if (ssSegments.empty()){
-            return retFoldTree;
-        }
-
-        core::Size firstSsCentroid = calcCentroid(ssSegments[1].first, ssSegments[1].second);
-
-        core::Size currentlow = 1, currentHigh, prevHigh = 0;
-        core::Size currentJumpId = 1;
-        for (core::Size segId = 1; segId <= ssSegments.size(); ++segId) {
-            //in each iteration, we make a SS segment + next loop (if any)
-            auto currSegment = ssSegments[segId];
-            if (segId != 1) {
-                currentlow = currSegment.first;
-            }
-            core::Size segmentCentroid = calcCentroid(currSegment.first, currSegment.second);
-            if(segId == ssSegments.size()){
-                currentHigh = secStruct.length();
-            } else{
-                currentHigh = currSegment.second;
-            }
-            //add SS Segments edges
-            if(firstSsCentroid != segmentCentroid)
-                addEdgeIfNotPresent(ft, firstSsCentroid, segmentCentroid, currentJumpId++, edges);
-            addEdgeIfNotPresent(ft, segmentCentroid, currentlow, core::kinematics::Edge::PEPTIDE, edges);
-            addEdgeIfNotPresent(ft, segmentCentroid, currentHigh, core::kinematics::Edge::PEPTIDE, edges);
-
-            if(segId == ssSegments.size())
-                break;
-
-            // find next loop params
-            currentlow = currentHigh + 1;
-            currentHigh = ssSegments[segId + 1].first -1;
-            core::Size loopCentroid = calcCentroid(currentlow, currentHigh);
-
-            //add SS Segments edges
-            addEdgeIfNotPresent(ft, firstSsCentroid, loopCentroid, currentJumpId++, edges);
-            addEdgeIfNotPresent(ft, loopCentroid, currentlow, core::kinematics::Edge::PEPTIDE, edges);
-            addEdgeIfNotPresent(ft, loopCentroid, currentHigh, core::kinematics::Edge::PEPTIDE, edges);
-        }
-        return core::kinematics::FoldTreeOP(retFoldTree);
-    }
-
-    static core::Size calcCentroid(core::Size first, core::Size second) {
-        return core::Size(double (second + first)/2.0);
-    }
-
-    static void addEdgeIfNotPresent(core::kinematics::FoldTree &ft, core::Size start, core::Size stop, int label,
-                                    std::set<std::pair<core::Size, core::Size>> &cashedEdges) {
-        std::pair<core::Size, core::Size> test{start, stop};
-        if(cashedEdges.find(test) == cashedEdges.end()){// if not alredy added
-            ft.add_edge(start, stop, label);
-            cashedEdges.insert(test);
-        }
-    }
-
-    core::kinematics::FoldTreeOP fold_tree_from_ss(core::pose::Pose& pose){
-        core::scoring::dssp::Dssp dssp(pose);
-        std::string secStruct = dssp.get_dssp_secstruct();
-        return fold_tree_from_ss_string(secStruct);
-    }
 
     void test_fold_tree_from_ss_string(){
         core::kinematics::FoldTreeOP foldTree(nullptr);
 
 
         std::cout << "Testing empty" << std::endl;
-        foldTree = fold_tree_from_ss_string("");
+        foldTree = protocols::bootcamp::fold_tree_from_ss_string("");
         TS_ASSERT(foldTree->empty())
 
         std::cout << "Testing no SS" << std::endl;
-        foldTree = fold_tree_from_ss_string("AAAAAAAAAAAMMMMMMRRRRRRRRR");
+        foldTree = protocols::bootcamp::fold_tree_from_ss_string("AAAAAAAAAAAMMMMMMRRRRRRRRR");
         TS_ASSERT(foldTree->empty())
 
         std::cout << "Testing example" << std::endl;
-        foldTree = fold_tree_from_ss_string("   EEEEEEE    EEEEEEE         EEEEEEEEE    EEEEEEEEEE   HHHHHH         EEEEEEEEE         EEEEE     ");
+        foldTree = protocols::bootcamp::fold_tree_from_ss_string("   EEEEEEE    EEEEEEE         EEEEEEEEE    EEEEEEEEEE   HHHHHH         EEEEEEEEE         EEEEE     ");
         std::string expected = "FOLD_TREE  EDGE 7 1 -1  EDGE 7 10 -1  EDGE 7 12 1  EDGE 12 11 -1  EDGE 12 14 -1  EDGE 7 18 2  EDGE 18 15 -1  EDGE 18 21 -1  EDGE 7 26 3  EDGE 26 22 -1  EDGE 26 30 -1  EDGE 7 35 4  EDGE 35 31 -1  EDGE 35 39 -1  EDGE 7 41 5  EDGE 41 40 -1  EDGE 41 43 -1  EDGE 7 48 6  EDGE 48 44 -1  EDGE 48 53 -1  EDGE 7 55 7  EDGE 55 54 -1  EDGE 55 56 -1  EDGE 7 59 8  EDGE 59 57 -1  EDGE 59 62 -1  EDGE 7 67 9  EDGE 67 63 -1  EDGE 67 71 -1  EDGE 7 76 10  EDGE 76 72 -1  EDGE 76 80 -1  EDGE 7 85 11  EDGE 85 81 -1  EDGE 85 89 -1  EDGE 7 92 12  EDGE 92 90 -1  EDGE 92 99 -1 ";
         TS_ASSERT_EQUALS(foldTree->size(), 38)
 
@@ -226,7 +127,7 @@ public:
 
     void test_test_in_pdb(){
         core::pose::Pose pose = create_test_in_pdb_pose();
-        core::kinematics::FoldTreeOP foldTree = fold_tree_from_ss(pose);
+        core::kinematics::FoldTreeOP foldTree = protocols::bootcamp::fold_tree_from_ss(pose);
         TS_ASSERT(foldTree->check_fold_tree())
     }
 };
